@@ -1,0 +1,107 @@
+name: Design Token Sync
+
+on:
+  push:
+    paths:
+      - 'uploads/*.json'
+      - 'output/*.css'
+      - 'output/*.scss'
+      - 'output/*.js'
+  workflow_dispatch:
+
+jobs:
+  sync-tokens:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm install
+      
+    - name: Check for token changes
+      id: check-changes
+      run: |
+        if git diff --quiet HEAD~1 HEAD -- uploads/ output/; then
+          echo "no_changes=true" >> $GITHUB_OUTPUT
+        else
+          echo "no_changes=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Get changed files
+      if: steps.check-changes.outputs.no_changes == 'false'
+      id: changed-files
+      run: |
+        echo "token_files=$(git diff --name-only HEAD~1 HEAD -- uploads/ | tr '\n' ' ')" >> $GITHUB_OUTPUT
+        echo "output_files=$(git diff --name-only HEAD~1 HEAD -- output/ | tr '\n' ' ')" >> $GITHUB_OUTPUT
+        
+    - name: Create PR for token changes
+      if: steps.check-changes.outputs.no_changes == 'false'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: |
+          🎨 Update design tokens
+          
+          - Token files: ${{ steps.changed-files.outputs.token_files }}
+          - Output files: ${{ steps.changed-files.outputs.output_files }}
+        title: '🎨 Design Token Update'
+        body: |
+          ## 🎨 Design Token Changes
+          
+          이 PR은 디자인 토큰 변경사항을 포함합니다.
+          
+          ### 변경된 파일들:
+          
+          **Token Files:**
+          ${{ steps.changed-files.outputs.token_files }}
+          
+          **Generated CSS/SCSS/JS Files:**
+          ${{ steps.changed-files.outputs.output_files }}
+          
+          ### 변경 사항:
+          - Figma에서 새로운 디자인 토큰이 업로드되었습니다
+          - style-dictionary를 통해 CSS, SCSS, JS 파일이 생성되었습니다
+          
+          ---
+          
+          🤖 이 PR은 자동으로 생성되었습니다.
+        branch: design-tokens/update-${{ github.run_number }}
+        delete-branch: true
+        
+    - name: Auto-assign reviewers
+      if: steps.check-changes.outputs.no_changes == 'false'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: pullRequests } = await github.rest.pulls.list({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            head: `design-tokens/update-${context.runNumber}`,
+            state: 'open'
+          });
+          
+          if (pullRequests.length > 0) {
+            const prNumber = pullRequests[0].number;
+            
+            await github.rest.pulls.requestReviewers({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              reviewers: ['${{ github.actor }}']
+            });
+            
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['design-tokens', 'auto-generated']
+            });
+          }

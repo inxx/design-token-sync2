@@ -1,0 +1,30 @@
+{
+  "name": "design-token-sync-server",
+  "version": "1.0.0",
+  "description": "Figma 디자인 토큰을 style-dictionary로 변환하고 GitHub PR을 자동 생성하는 서버",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "build-tokens": "style-dictionary build"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "style-dictionary": "^3.9.0",
+    "@octokit/rest": "^20.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "design-tokens",
+    "figma",
+    "style-dictionary",
+    "github-actions"
+  ],
+  "author": "",
+  "license": "MIT"
+}

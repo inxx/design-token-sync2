@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design Token Sync Server</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Design Token Sync Server</h1>
+        
+        <div class="upload-section">
+            <h3>Figma 디자인 토큰 업로드</h3>
+            <p>Figma에서 다운받은 JSON 파일을 업로드하세요</p>
+            
+            <div class="form-group">
+                <input type="file" id="tokenFile" accept=".json" />
+                <button onclick="uploadFile()">파일 업로드</button>
+            </div>
+        </div>
+
+
+        <div class="loading" id="loading">
+            <p id="loadingMessage">처리 중...</p>
+            <div style="width: 100%; background: #f0f0f0; border-radius: 4px; margin-top: 10px;">
+                <div id="progressBar" style="width: 0%; height: 20px; background: #007bff; border-radius: 4px; transition: width 0.3s;"></div>
+            </div>
+        </div>
+
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        async function uploadFile() {
+            const fileInput = document.getElementById('tokenFile');
+            const uploadButton = document.querySelector('button[onclick="uploadFile()"]');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showResult('파일을 선택해주세요.', 'error');
+                return;
+            }
+
+            // 버튼 비활성화 및 로딩 시작
+            uploadButton.disabled = true;
+            uploadButton.textContent = '업로드 중...';
+            showLoading(true, '파일 업로드 중...', 30);
+
+            const formData = new FormData();
+            formData.append('tokens', file);
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    updateProgress(60, 'CSS 변환 및 PR 생성 중...');
+                    // 자동으로 CSS 빌드 및 PR 생성 실행
+                    await automaticBuildAndPR(result.filename);
+                } else {
+                    showResult(`❌ 업로드 실패: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ 업로드 중 오류: ${error.message}`, 'error');
+            } finally {
+                // 버튼 활성화 및 원래 텍스트로 복원
+                uploadButton.disabled = false;
+                uploadButton.textContent = '파일 업로드';
+                showLoading(false);
+            }
+        }
+
+        async function automaticBuildAndPR(filename) {
+            try {
+                const response = await fetch('/build-css', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ filename })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    updateProgress(100, '완료!');
+                    let message = `✅ 전체 프로세스 완료!<br>`;
+                    message += `업로드된 파일: ${filename}<br>`;
+                    message += `생성된 CSS 파일: ${result.outputFiles.join(', ')}<br>`;
+                    
+                    if (result.pr && result.pr.success) {
+                        message += `🚀 GitHub PR 자동 생성됨: <a href="${result.pr.prUrl}" target="_blank">PR #${result.pr.prNumber}</a>`;
+                    } else if (result.pr && !result.pr.success) {
+                        message += `⚠️ PR 생성 실패: ${result.pr.error}`;
+                    }
+                    
+                    showResult(message, 'success');
+                } else {
+                    showResult(`❌ CSS 빌드 실패: ${result.error || result.message}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ CSS 빌드 중 오류: ${error.message}`, 'error');
+            }
+        }
+
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = message;
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+        }
+
+        function showLoading(show, message = '처리 중...', progress = 0) {
+            const loadingDiv = document.getElementById('loading');
+            const messageEl = document.getElementById('loadingMessage');
+            const progressBar = document.getElementById('progressBar');
+            
+            if (show) {
+                loadingDiv.style.display = 'block';
+                messageEl.textContent = message;
+                progressBar.style.width = progress + '%';
+            } else {
+                loadingDiv.style.display = 'none';
+                progressBar.style.width = '0%';
+            }
+        }
+
+        function updateProgress(percent, message) {
+            const messageEl = document.getElementById('loadingMessage');
+            const progressBar = document.getElementById('progressBar');
+            
+            messageEl.textContent = message;
+            progressBar.style.width = percent + '%';
+        }
+    </script>
+</body>
+</html>
