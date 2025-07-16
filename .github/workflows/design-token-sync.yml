@@ -75,7 +75,6 @@ jobs:
           🤖 이 PR은 자동으로 생성되었습니다.
         branch: design-tokens/update-${{ github.run_number }}
         delete-branch: true
-        assignees: do12net
         
     - name: Add labels to PR
       if: steps.check-changes.outputs.no_changes == 'false'
